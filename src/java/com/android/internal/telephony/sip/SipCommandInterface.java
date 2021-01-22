@@ -415,6 +415,10 @@ class SipCommandInterface extends BaseCommands implements CommandsInterface {
     }
 
     @Override
+    public void invokeSomcRilRequestRaw(byte[] data, Message response) {
+    }
+
+    @Override
     public void invokeOemRilRequestRaw(byte[] data, Message response) {
     }
 

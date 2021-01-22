@@ -148,6 +148,8 @@ public abstract class BaseCommands implements CommandsInterface {
     protected Registrant mSsRegistrant;
     protected Registrant mRegistrationFailedRegistrant;
 
+    protected Registrant mUnsolSomcHookRawRegistrant;
+
     // Lock that mLastEmergencyNumberListIndication uses.
     private Object mLastEmergencyNumberListIndicationLock = new Object();
     // Cache last emergency number list indication from radio
@@ -646,6 +648,17 @@ public abstract class BaseCommands implements CommandsInterface {
         if (mUnsolOemHookRawRegistrant != null && mUnsolOemHookRawRegistrant.getHandler() == h) {
             mUnsolOemHookRawRegistrant.clear();
             mUnsolOemHookRawRegistrant = null;
+        }
+    }
+
+    public void setOnUnsolSomcHookRaw(Handler h, int what, Object obj) {
+        this.mUnsolSomcHookRawRegistrant = new Registrant(h, what, obj);
+    }
+
+    public void unSetOnUnsolSomcHookRaw(Handler h) {
+        if (this.mUnsolSomcHookRawRegistrant != null && this.mUnsolSomcHookRawRegistrant.getHandler() == h) {
+            this.mUnsolSomcHookRawRegistrant.clear();
+            this.mUnsolSomcHookRawRegistrant = null;
         }
     }
 

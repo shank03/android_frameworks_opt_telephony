@@ -1612,6 +1612,13 @@ public interface CommandsInterface {
     void invokeOemRilRequestStrings(String[] strings, Message response);
 
     /**
+     * SOMC
+     */
+    void invokeSomcRilRequestRaw(byte[] bArr, Message message);
+    void setOnUnsolSomcHookRaw(Handler handler, int i, Object obj);
+    void unSetOnUnsolSomcHookRaw(Handler handler);
+
+    /**
      * Fires when RIL_UNSOL_OEM_HOOK_RAW is received from the RIL.
      */
     void setOnUnsolOemHookRaw(Handler h, int what, Object obj);

@@ -771,6 +771,10 @@ public class GsmCdmaPhone extends Phone {
 
         mNotifier.notifyDisconnectCause(this, cn.getDisconnectCause(),
                 cn.getPreciseDisconnectCause());
+
+        if (SystemProperties.getBoolean("ro.somc.rcs_tapi", false) && isPhoneTypeGsm()) {
+            mNotifier.notifyPreciseCallStateExtended(this, false);
+        }
     }
 
     public void notifyUnknownConnection(Connection cn) {

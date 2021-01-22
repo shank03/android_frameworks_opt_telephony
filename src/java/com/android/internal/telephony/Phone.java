@@ -214,6 +214,8 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     protected static final int EVENT_REGISTRATION_FAILED = 57;
     protected static final int EVENT_BARRING_INFO_CHANGED = 58;
 
+    private static final int EVENT_UNSOL_SOMC_HOOK_RAW = 501;
+
     protected static final int EVENT_LAST = EVENT_BARRING_INFO_CHANGED;
 
     // For shared prefs.
@@ -588,6 +590,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         }
         mCi.startLceService(DEFAULT_REPORT_INTERVAL_MS, LCE_PULL_MODE,
                 obtainMessage(EVENT_CONFIG_LCE));
+        mCi.setOnUnsolSomcHookRaw(this, EVENT_UNSOL_SOMC_HOOK_RAW, null);
     }
 
     /**
@@ -756,6 +759,15 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
                     mAllDataDisconnectedRegistrants.notifyRegistrants();
                 }
                 break;
+
+            case EVENT_UNSOL_SOMC_HOOK_RAW:
+                AsyncResult result = (AsyncResult) msg.obj;
+                if (result.exception == null) {
+                    mNotifier.notifySomcHookRawEventForSubscriber(getSubId(), (byte[]) result.result);
+                    return;
+                }
+                android.telephony.Rlog.e(LOG_TAG, "SOMC hook raw exception: " + result.exception);
+                return;
             default:
                 throw new RuntimeException("unexpected event not handled");
         }
@@ -2459,6 +2471,11 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     @Deprecated
     public void invokeOemRilRequestStrings(String[] strings, Message response) {
         mCi.invokeOemRilRequestStrings(strings, response);
+    }
+
+    @UnsupportedAppUsage
+    public void invokeSomcRilRequestRaw(byte[] data, Message response) {
+        this.mCi.invokeSomcRilRequestRaw(data, response);
     }
 
     /**

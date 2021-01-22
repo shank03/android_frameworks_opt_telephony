@@ -18,20 +18,13 @@ package com.android.internal.telephony;
 
 import android.annotation.NonNull;
 import android.content.Context;
+import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.os.SystemProperties;
+import android.telephony.*;
 import android.telephony.Annotation.DataFailureCause;
 import android.telephony.Annotation.RadioPowerState;
 import android.telephony.Annotation.SrvccState;
-import android.telephony.BarringInfo;
-import android.telephony.CallQuality;
-import android.telephony.CellIdentity;
-import android.telephony.CellInfo;
-import android.telephony.PhoneCapability;
-import android.telephony.PreciseCallState;
-import android.telephony.PreciseDataConnectionState;
-import android.telephony.ServiceState;
-import android.telephony.TelephonyDisplayInfo;
-import android.telephony.TelephonyManager;
-import android.telephony.TelephonyRegistryManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.ImsReasonInfo;
@@ -50,6 +43,7 @@ public class DefaultPhoneNotifier implements PhoneNotifier {
     private static final boolean DBG = false; // STOPSHIP if true
 
     private TelephonyRegistryManager mTelephonyRegistryMgr;
+    protected ITelephonyRegistry mRegistry = ITelephonyRegistry.Stub.asInterface(ServiceManager.getService("telephony.registry"));
 
 
     public DefaultPhoneNotifier(Context context) {
@@ -154,12 +148,117 @@ public class DefaultPhoneNotifier implements PhoneNotifier {
         Call ringingCall = sender.getRingingCall();
         Call foregroundCall = sender.getForegroundCall();
         Call backgroundCall = sender.getBackgroundCall();
+        boolean isSomcRcs = SystemProperties.getBoolean("ro.somc.rcs_tapi", false);
         if (ringingCall != null && foregroundCall != null && backgroundCall != null) {
             mTelephonyRegistryMgr.notifyPreciseCallState(sender.getSubId(), sender.getPhoneId(),
                 convertPreciseCallState(ringingCall.getState()),
                 convertPreciseCallState(foregroundCall.getState()),
                 convertPreciseCallState(backgroundCall.getState()));
         }
+        boolean imsRegState = false;
+        ITelephony telephonyService = ITelephony.Stub.asInterface(ServiceManager.getService("phone"));
+        if (telephonyService != null) {
+            try {
+                imsRegState = telephonyService.isImsRegistered(sender.getSubId());
+            } catch (RemoteException e) {
+            }
+        }
+        if (!((isSomcRcs && ((sender.getPhoneType() == 5 || imsRegState) && (sender.getPhoneType() != 5 || !imsRegState)))
+                || ringingCall == null || foregroundCall == null || backgroundCall == null)) {
+            try {
+                this.mRegistry.notifyPreciseCallState(sender.getSubId(), SubscriptionManager.getSlotIndex(sender.getSubId()),
+                        convertPreciseCallState(ringingCall.getState()), convertPreciseCallState(foregroundCall.getState()),
+                        convertPreciseCallState(backgroundCall.getState()));
+            } catch (RemoteException e) {
+            }
+        }
+        if (isSomcRcs) {
+            notifyPreciseCallStateExtended(sender, false);
+        }
+    }
+
+    @Override
+    public void notifyPreciseCallStateExtended(Phone phone, boolean isOnHold) {
+        String ringingNumber;
+        String foregroundNumber;
+        String backgroundNumber;
+        String backgroundNumber2;
+        String foregroundNumber2;
+        Call ringingCall = phone.getRingingCall();
+        Call foregroundCall = phone.getForegroundCall();
+        Call backgroundCall = phone.getBackgroundCall();
+        boolean imsRegState = false;
+        ITelephony telephonyService = ITelephony.Stub.asInterface(ServiceManager.getService("phone"));
+        if (telephonyService != null) {
+            try {
+                imsRegState = telephonyService.isImsRegistered(phone.getSubId());
+            } catch (RemoteException e) {
+            }
+        }
+        if (((phone.getPhoneType() != 5 && !imsRegState) || (phone.getPhoneType() == 5 && imsRegState)) && ringingCall != null && foregroundCall != null && backgroundCall != null) {
+            String ringingState = convertPreciseCallStateToString(ringingCall.getState());
+            String foregroundState = convertPreciseCallStateToString(foregroundCall.getState());
+            String backgroundState = convertPreciseCallStateToString(backgroundCall.getState());
+            Connection ringingEarliest = ringingCall.getEarliestConnection();
+            Connection foregroundEarliest = foregroundCall.getEarliestConnection();
+            Connection backgroundEarliest = backgroundCall.getEarliestConnection();
+            if (isOnHold) {
+                foregroundState = convertPreciseCallStateToString(Call.State.HOLDING);
+            }
+            String foregroundState2 = foregroundState;
+            if (ringingEarliest != null) {
+                ringingNumber = ringingEarliest.getAddress();
+            } else {
+                ringingNumber = "";
+            }
+            if (foregroundEarliest != null) {
+                if (isRealConferenceCall(foregroundCall)) {
+                    foregroundNumber2 = "conference";
+                } else {
+                    foregroundNumber2 = foregroundEarliest.getAddress();
+                }
+                foregroundNumber = foregroundNumber2;
+            } else {
+                foregroundNumber = "";
+            }
+            if (backgroundEarliest != null) {
+                if (isRealConferenceCall(backgroundCall)) {
+                    backgroundNumber2 = "conference";
+                } else {
+                    backgroundNumber2 = backgroundEarliest.getAddress();
+                }
+                backgroundNumber = backgroundNumber2;
+            } else {
+                backgroundNumber = "";
+            }
+            try {
+                Connection connection = backgroundEarliest;
+                Connection connection2 = foregroundEarliest;
+                Connection connection3 = ringingEarliest;
+                try {
+                    mRegistry.notifyPreciseCallStateExtended(ringingState, foregroundState2, backgroundState,
+                            ringingNumber, foregroundNumber, backgroundNumber);
+                } catch (RemoteException e2) {
+                }
+            } catch (RemoteException e3) {
+                Connection connection4 = backgroundEarliest;
+                Connection connection5 = foregroundEarliest;
+                Connection connection6 = ringingEarliest;
+            }
+        }
+    }
+
+    private boolean isRealConferenceCall(Call call) {
+        if (!call.isMultiparty()) {
+            return false;
+        }
+        int numAlive = 0;
+        for (Connection conn : call.getConnections()) {
+            if (conn.isAlive()) {
+                numAlive++;
+            }
+        }
+        return numAlive > 1;
     }
 
     public void notifyDisconnectCause(Phone sender, int cause, int preciseCause) {
@@ -258,6 +357,14 @@ public class DefaultPhoneNotifier implements PhoneNotifier {
                 barringInfo);
     }
 
+    @Override
+    public void notifySomcHookRawEventForSubscriber(int subId, byte[] rawData) {
+        try {
+            mRegistry.notifySomcHookRawEventForSubscriber(subId, rawData);
+        } catch (RemoteException e) {
+        }
+    }
+
     /**
      * Convert the {@link DataActivityState} enum into the TelephonyManager.DATA_* constants for the
      * public API.
@@ -301,6 +408,32 @@ public class DefaultPhoneNotifier implements PhoneNotifier {
                 return PreciseCallState.PRECISE_CALL_STATE_DISCONNECTING;
             default:
                 return PreciseCallState.PRECISE_CALL_STATE_IDLE;
+        }
+    }
+
+    public static String convertPreciseCallStateToString(Call.State state) {
+        String stateString = Call.State.IDLE.toString();
+        switch (state) {
+            case ACTIVE:
+                return Call.State.ACTIVE.toString();
+            case HOLDING:
+                return Call.State.HOLDING.toString();
+            case DIALING:
+                return Call.State.DIALING.toString();
+            case ALERTING:
+                return Call.State.ALERTING.toString();
+            case INCOMING:
+                return Call.State.INCOMING.toString();
+            case WAITING:
+                return Call.State.WAITING.toString();
+            case DISCONNECTED:
+                return Call.State.DISCONNECTED.toString();
+            case DISCONNECTING:
+                return Call.State.DISCONNECTING.toString();
+            case IDLE:
+                return Call.State.IDLE.toString();
+            default:
+                return stateString;
         }
     }
 

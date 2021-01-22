@@ -323,10 +323,15 @@ public class RadioResponse extends IRadioResponse.Stub {
      */
     public void getVoiceRegistrationStateResponse(RadioResponseInfo responseInfo,
                                                   VoiceRegStateResult voiceRegResponse) {
+        int ecSupported;
         RILRequest rr = mRil.processResponse(responseInfo);
-
+        synchronized (this.mRil.mSomcHookEcSupported) {
+            ecSupported = this.mRil.mSomcHookEcSupported.get(responseInfo.serial, -1);
+            this.mRil.mSomcHookEcSupported.delete(responseInfo.serial);
+        }
         if (rr != null) {
             if (responseInfo.error == RadioError.NONE) {
+                rr.mResult.arg1 = ecSupported;
                 sendMessageResponse(rr.mResult, voiceRegResponse);
             }
             mRil.processResponseDone(rr, responseInfo, voiceRegResponse);
@@ -1891,10 +1896,14 @@ public class RadioResponse extends IRadioResponse.Stub {
     private void responseCurrentCalls(RadioResponseInfo responseInfo,
                                       ArrayList<android.hardware.radio.V1_0.Call> calls) {
         RILRequest rr = mRil.processResponse(responseInfo);
-
+        int codec;
         if (rr != null) {
             int num = calls.size();
             ArrayList<DriverCall> dcCalls = new ArrayList<DriverCall>(num);
+            synchronized (this.mRil.mSomcOemHookAudioCodecs) {
+                codec = this.mRil.mSomcOemHookAudioCodecs.get(responseInfo.serial, 0);
+                this.mRil.mSomcOemHookAudioCodecs.delete(responseInfo.serial);
+            }
             DriverCall dc;
 
             for (int i = 0; i < num; i++) {
@@ -1938,7 +1947,7 @@ public class RadioResponse extends IRadioResponse.Stub {
 
                 // Make sure there's a leading + on addresses with a TOA of 145
                 dc.number = PhoneNumberUtils.stringFromStringAndTOA(dc.number, dc.TOA);
-
+                dc.audioQuality = codec;
                 dcCalls.add(dc);
 
                 if (dc.isVoicePrivacy) {

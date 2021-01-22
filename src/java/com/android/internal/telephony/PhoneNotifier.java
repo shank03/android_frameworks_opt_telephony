@@ -125,4 +125,8 @@ public interface PhoneNotifier {
 
     /** Notify barring info has changed */
     void notifyBarringInfoChanged(Phone sender, @NonNull BarringInfo barringInfo);
+
+    void notifySomcHookRawEventForSubscriber(int i, byte[] bArr);
+
+    void notifyPreciseCallStateExtended(Phone phone, boolean z);
 }
